@@ -1,5 +1,3 @@
-// License: GPL-3.0
-
 export type * from './types.js';
 export { default as MAX } from './max.js';
 export { default as NIL } from './nil.js';
