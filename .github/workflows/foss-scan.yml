@@ -16,7 +16,7 @@ jobs:
       - name: Install dependencies and ScanCode Toolkit
         run: |
           sudo apt update
-          sudo apt install -y git python3 python3-pip
+          sudo apt install -y git python3 python3-pip jq
           git clone https://github.com/nexB/scancode-toolkit.git
           cd scancode-toolkit
           ./configure
@@ -27,6 +27,21 @@ jobs:
           cd scancode-toolkit
           ./scancode --license --json-pp "$REPO_DIR/scan-output.json" "$REPO_DIR/src/uuid/src"
 
+      - name: Fail build on risky licenses
+        run: |
+          jq -r '.license_detections[].license_expression' scan-output.json > detected-licenses.txt
+          echo "✅ Detected licenses:"
+          cat detected-licenses.txt
+
+          risky=("gpl" "gpl-2.0" "gpl-3.0" "agpl" "agpl-3.0" "lgpl" "lgpl-2.1" "lgpl-3.0")
+          for license in "${risky[@]}"; do
+            if grep -i -q "$license" detected-licenses.txt; then
+              echo "::error::❌ Risky license found: $license"
+              exit 1
+            fi
+          done
+
+          echo "✅ No risky licenses found."
 
       - name: Upload scan results
         uses: actions/upload-artifact@v4
