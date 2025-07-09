@@ -13,19 +13,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install dependencies and ScanCode Toolkit
+      - name: Install dependencies and GitHub CLI
         run: |
           sudo apt update
-          sudo apt install -y git python3 python3-pip jq
+          sudo apt install -y git python3 python3-pip jq gh
+
+      - name: Clone and configure ScanCode Toolkit
+        run: |
           git clone https://github.com/nexB/scancode-toolkit.git
           cd scancode-toolkit
           ./configure
 
-      - name: Run ScanCode on src/uuid/src
+      - name: Run ScanCode license scan
         run: |
           REPO_DIR=$(pwd)
           cd scancode-toolkit
-          ./scancode --license --json-pp "$REPO_DIR/scan-output.json" "$REPO_DIR/src/uuid/src"
+          ./scancode \
+            --license \
+            --json-pp "$REPO_DIR/scan-output.json" \
+            "$REPO_DIR/src/uuid/src"
 
       - name: Fail build on risky licenses
         run: |
@@ -43,8 +49,20 @@ jobs:
 
           echo "✅ No risky licenses found."
 
-      - name: Upload scan results
+      - name: Generate SPDX and CycloneDX SBOMs
+        run: |
+          cd scancode-toolkit
+          REPO_DIR=$(pwd)
+          ./scancode \
+            --spdx-tv "$REPO_DIR/scan-output.spdx" \
+            --cyclonedx "$REPO_DIR/scan-output.cyclonedx.json" \
+            "$REPO_DIR/src/uuid/src"
+
+      - name: Upload all scan artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: scancode-result
-          path: scan-output.json
+          name: foss-scan-reports
+          path: |
+            scan-output.json
+            scan-output.spdx
+            scan-output.cyclonedx.json
