@@ -21,10 +21,12 @@ jobs:
           cd scancode-toolkit
           ./configure
 
-      - name: Run ScanCode on src/uuid
+      - name: Run ScanCode on src/uuid/src
         run: |
+          REPO_DIR=$(pwd)
           cd scancode-toolkit
-          ./scancode --license --json-pp ../scan-output.json ../src/uuid/src
+          ./scancode --license --json-pp "$REPO_DIR/scan-output.json" "$REPO_DIR/src/uuid/src"
+
 
       - name: Upload scan results
         uses: actions/upload-artifact@v4
