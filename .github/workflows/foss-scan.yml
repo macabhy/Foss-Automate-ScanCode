@@ -26,12 +26,13 @@ jobs:
 
       - name: Run ScanCode license scan
         run: |
-          REPO_DIR=$(pwd)
           cd scancode-toolkit
           ./scancode \
-            --license \
-            --json-pp "$REPO_DIR/scan-output.json" \
-            "$REPO_DIR/src/uuid/src"
+          --license \
+          --json-pp ../scan-output.json \
+          ../src/uuid/src
+
+    
 
       - name: Fail build on risky licenses
         run: |
@@ -52,11 +53,11 @@ jobs:
       - name: Generate SPDX and CycloneDX SBOMs
         run: |
           cd scancode-toolkit
-          REPO_DIR=$(pwd)
           ./scancode \
-            --spdx-tv "$REPO_DIR/scan-output.spdx" \
-            --cyclonedx "$REPO_DIR/scan-output.cyclonedx.json" \
-            "$REPO_DIR/src/uuid/src"
+            --spdx-tv ../scan-output.spdx \
+            --cyclonedx ../scan-output.cyclonedx.json \
+            ../src/uuid/src
+
 
       - name: Upload all scan artifacts
         uses: actions/upload-artifact@v4
