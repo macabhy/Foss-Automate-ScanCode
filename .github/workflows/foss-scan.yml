@@ -36,7 +36,8 @@ jobs:
       - name: Show detected licenses with file paths
         run: |
           echo " Detected licenses:"
-          jq -r '.license_detections[] | "\(.license_expression) :: \(.location[0].path)"' scan-output.json | sort -u
+          jq -r '.files[] | select(.license_expression != null) | "\(.license_expression) :: \(.path)"' scan-output.json | sort -u
+
 
       - name: Check for risky licenses
         run: |
@@ -44,23 +45,31 @@ jobs:
 
           risky_found=0
 
-          jq -c '.license_detections[]' scan-output.json | while read -r detection; do
-            expr=$(echo "$detection" | jq -r '.license_expression')
-            file=$(echo "$detection" | jq -r '.location[0].path')
+          jq -c '.files[] | select(.license_expression != null)' scan-output.json | while read -r file; do
+            expr=$(echo "$file" | jq -r '.license_expression')
+            path=$(echo "$file" | jq -r '.path')
             normalized=$(echo "$expr" | tr '[:upper:]' '[:lower:]')
 
             # Ignore dual-licensed expressions
             if echo "$normalized" | grep -q " or "; then
-              echo " Ignored dual-licensed: $expr in $file"
+              echo " Ignored dual-licensed: $expr in $path"
               continue
             fi
 
             # Flag risky licenses (GPL/AGPL)
             if echo "$normalized" | grep -E 'gpl|agpl'; then
-              echo " Risky license found: $expr in $file"
+              echo " Risky license found: $expr in $path"
               risky_found=1
             fi
           done
+
+          if [ "$risky_found" -eq 1 ]; then
+            echo " Build failed due to risky licenses."
+            exit 1
+          else
+            echo " No risky licenses found"
+          fi
+
 
           if [ "$risky_found" -eq 1 ]; then
             echo " Build failed due to risky licenses."
