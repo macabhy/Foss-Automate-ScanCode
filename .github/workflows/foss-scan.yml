@@ -23,7 +23,6 @@ jobs:
         git clone https://github.com/nexB/scancode-toolkit.git
         cd scancode-toolkit
         pip install -e .
-        cd ..
 
     # Run ScanCode
     - name: Run ScanCode on current project
