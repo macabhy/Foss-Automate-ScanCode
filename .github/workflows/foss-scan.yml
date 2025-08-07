@@ -38,7 +38,7 @@ jobs:
 
       - name: Detect dual-licensed (Permissive + GPL) files
         run: |
-          echo "🔍 Checking for dual-licensed files (e.g., MIT OR GPL)..."
+          echo " Checking for dual-licensed files (e.g., MIT OR GPL)..."
           jq -r '
             .files[]
             | select(.license_expression != null)
