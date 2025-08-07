@@ -1,5 +1,10 @@
-// This file is part of the UUID library.
-// SPDX-License-Identifier: MIT
+/*!
+ * This file is dual-licensed under the MIT or GPL-2.0 license.
+ *
+ * You may choose to use it under the terms of the MIT License or
+ * the GNU General Public License version 2.0.
+ */
+
 export type * from './types.js';
 export { default as MAX } from './max.js';
 export { default as NIL } from './nil.js';

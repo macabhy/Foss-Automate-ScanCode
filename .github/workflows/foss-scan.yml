@@ -35,7 +35,39 @@ jobs:
           --json-pp ../scan-output.json \
           ../src/uuid/src
 
-    
+      - name: Detect dual-licensed files with permissive and GPL
+        run: |
+          echo "🔍 Checking for dual-licensed files (e.g., MIT OR GPL)..."
+          
+          RISKY="gpl agpl lgpl"
+          PERMISSIVE="mit bsd apache isc"
+          
+          MATCHED=0
+          
+          jq -r '.files[] | select(.license_expression != null) | "\(.path) \(.license_expression)"' scan.json |
+          while read -r path license_expr; do
+            expr_lower=$(echo "$license_expr" | tr '[:upper:]' '[:lower:]')
+            
+            # Only consider OR expressions
+            if [[ "$expr_lower" == *" or "* ]]; then
+              for risky in $RISKY; do
+                if [[ "$expr_lower" == *"$risky"* ]]; then
+                  for perm in $PERMISSIVE; do
+                    if [[ "$expr_lower" == *"$perm"* ]]; then
+                      echo "ℹ️  Dual-licensed file: $path"
+                      echo "   → License Expression: $license_expr"
+                      MATCHED=1
+                      break
+                    fi
+                  done
+                fi
+              done
+            fi
+          done
+          
+          if [[ "$MATCHED" -eq 0 ]]; then
+            echo "✅ No permissive+GPL dual-licensed files found."
+          fi
 
       - name: Fail build on risky licenses
         run: |
