@@ -44,7 +44,7 @@ jobs:
           
           MATCHED=0
           
-          jq -r '.files[] | select(.license_expression != null) | "\(.path) \(.license_expression)"' scan.json |
+          jq -r '.files[] | select(.license_expression != null) | "\(.path) \(.license_expression)"' scan-output.json |
           while read -r path license_expr; do
             expr_lower=$(echo "$license_expr" | tr '[:upper:]' '[:lower:]')
             
