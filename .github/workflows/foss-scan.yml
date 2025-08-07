@@ -31,7 +31,7 @@ jobs:
           ./scancode \
             --license \
             --json-pp ../scan-output.json \
-            ../src/uuid/src
+            ../src/uuid
 
       - name: Show detected licenses with file paths
         run: |
