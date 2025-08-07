@@ -35,55 +35,56 @@ jobs:
           --json-pp ../scan-output.json \
           ../src/uuid/src
 
-      - name: Detect dual-licensed files with permissive and GPL
+      - name: Detect dual-licensed (Permissive + GPL) files
         run: |
-          echo "🔍 Checking for dual-licensed files (e.g., MIT OR GPL)..."
-          
-          RISKY="gpl agpl lgpl"
-          PERMISSIVE="mit bsd apache isc"
-          
-          MATCHED=0
-          
-          jq -r '.files[] | select(.license_expression != null) | "\(.path) \(.license_expression)"' scan-output.json |
-          while read -r path license_expr; do
-            expr_lower=$(echo "$license_expr" | tr '[:upper:]' '[:lower:]')
-            
-            # Only consider OR expressions
-            if [[ "$expr_lower" == *" or "* ]]; then
-              for risky in $RISKY; do
-                if [[ "$expr_lower" == *"$risky"* ]]; then
-                  for perm in $PERMISSIVE; do
-                    if [[ "$expr_lower" == *"$perm"* ]]; then
-                      echo "ℹ️  Dual-licensed file: $path"
-                      echo "   → License Expression: $license_expr"
-                      MATCHED=1
-                      break
-                    fi
-                  done
-                fi
-              done
-            fi
-          done
-          
-          if [[ "$MATCHED" -eq 0 ]]; then
-            echo "✅ No permissive+GPL dual-licensed files found."
+          echo "Checking for dual-licensed files (e.g., MIT OR GPL)..."
+          jq -r '
+            .files[]
+            | select(.license_expression != null)
+            | select((.license_expression | test("gpl-2.0|gpl-3.0")) and (.license_expression | test("mit|bsd|apache")))
+            | "\(.path): \(.license_expression)"
+            ' scan-output.json > dual-licensed.txt
+
+          if [ -s dual-licensed.txt ]; then
+             echo "Detected files with dual licenses (Permissive + GPL):"
+             cat dual-licensed.txt
+             echo "Assuming user can choose permissive license. Proceeding..."
+            else
+             echo "No permissive+GPL dual-licensed files found."
           fi
 
-      - name: Fail build on risky licenses
+
+      - name: Check for risky licenses (excluding dual-licensed files)
         run: |
-          jq -r '.license_detections[].license_expression' scan-output.json > detected-licenses.txt
-          echo "✅ Detected licenses:"
-          cat detected-licenses.txt
+          echo "Checking for risky licenses (excluding dual-licensed files)..."
 
-          risky=("gpl" "gpl-2.0" "gpl-3.0" "agpl" "agpl-3.0" "lgpl" "lgpl-2.1" "lgpl-3.0")
-          for license in "${risky[@]}"; do
-            if grep -i -q "$license" detected-licenses.txt; then
-              echo "::error::❌ Risky license found: $license"
-              exit 1
-            fi
-          done
+          # Step 1: Get list of dual-licensed file paths
+          if [ -f dual-licensed.txt ]; then
+            cat dual-licensed.txt | cut -d ':' -f1 > dual_paths.txt
+          else
+            touch dual_paths.txt
+          fi
 
-          echo "✅ No risky licenses found."
+          # Step 2: Scan all files for risky licenses
+          jq -r '
+            .files[]
+            | select(.license_expression != null)
+            | select(.license_expression | test("gpl-2.0|gpl-3.0|agpl|lgpl"))
+            | "\(.path): \(.license_expression)"
+          ' scan-output.json > all-risky.txt
+
+          # Step 3: Exclude dual-licensed files from risky list
+          grep -v -F -f dual_paths.txt all-risky.txt > risky.txt || true
+
+          # Step 4: Show and fail if any risky license remains
+          if [ -s risky.txt ]; then
+            echo "Risky licenses found (not dual-licensed):"
+            cat risky.txt
+            exit 1
+          else
+            echo "No risky licenses found (excluding dual-licensed files)."
+          fi
+
 
       - name: Generate SPDX and CycloneDX SBOMs
         run: |
