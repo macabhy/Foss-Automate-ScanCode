@@ -36,7 +36,7 @@ jobs:
       - name: Show detected licenses with file paths
         run: |
           echo " Detected licenses:"
-          jq -r '.license_detections[] | "\(.license_expression) :: \(.location.path)""' scan-output.json | sort -u
+          jq -r '.license_detections[] | "\(.license_expression) :: \(.location[0].path)"' scan-output.json | sort -u
 
       - name: Check for risky licenses
         run: |
@@ -46,7 +46,7 @@ jobs:
 
           jq -c '.license_detections[]' scan-output.json | while read -r detection; do
             expr=$(echo "$detection" | jq -r '.license_expression')
-            file=$(echo "$detection" | jq -r '.location.path')
+            file=$(echo "$detection" | jq -r '.location[0].path')
             normalized=$(echo "$expr" | tr '[:upper:]' '[:lower:]')
 
             # Ignore dual-licensed expressions
@@ -68,3 +68,5 @@ jobs:
           else
             echo " No risky licenses found"
           fi
+
+      
