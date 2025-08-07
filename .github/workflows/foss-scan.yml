@@ -24,6 +24,9 @@ jobs:
           cd scancode-toolkit
           ./configure
 
+      - name: Clean old scan output
+        run: rm -f scan-output.json      
+
       - name: Run ScanCode license scan
         run: |
           cd scancode-toolkit
