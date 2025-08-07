@@ -40,15 +40,23 @@ jobs:
       - name: Detect dual-licensed (Permissive + GPL) files
         run: |
           echo " Checking for dual-licensed files (e.g., MIT OR GPL)..."
-
           jq -r '
             .files[]
             | select(.license_expression != null)
             | {
                 path,
-                licenses: (.license_expression | gsub("[()\"]"; "") | split(" and | AND | or | OR ") | map(ascii_downcase | strip))
+                licenses: (
+                  .license_expression
+                  | gsub("[()\"]"; "")                               # remove brackets/quotes
+                  | split(" and | AND | or | OR ")                  # split on AND/OR
+                  | map(ascii_downcase | gsub("^\\s+|\\s+$"; ""))   # lowercase + trim
+                )
               }
-            | select((.licenses | any(. == "gpl-2.0" or . == "gpl-3.0")) and (.licenses | any(. == "mit" or . == "bsd" or . == "apache-2.0")))
+            | select(
+                (.licenses | any(. == "gpl-2.0" or . == "gpl-3.0"))
+                and
+                (.licenses | any(. == "mit" or . == "bsd" or . == "apache-2.0"))
+              )
             | "\(.path): \(.licenses | join(", "))"
           ' scan-output.json > dual-licensed.txt
 
@@ -59,6 +67,7 @@ jobs:
           else
             echo " No permissive+GPL dual-licensed files found."
           fi
+
 
 
 
