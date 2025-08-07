@@ -35,23 +35,25 @@ jobs:
           --json-pp ../scan-output.json \
           ../src/uuid/src
 
+
       - name: Detect dual-licensed (Permissive + GPL) files
         run: |
-          echo "Checking for dual-licensed files (e.g., MIT OR GPL)..."
+          echo "🔍 Checking for dual-licensed files (e.g., MIT OR GPL)..."
           jq -r '
             .files[]
             | select(.license_expression != null)
-            | select((.license_expression | test("gpl-2.0|gpl-3.0")) and (.license_expression | test("mit|bsd|apache")))
+            | select(.license_expression | test("(?i)(mit|bsd|apache).*or.*gpl|gpl.*or.*(mit|bsd|apache)"))
             | "\(.path): \(.license_expression)"
-            ' scan-output.json > dual-licensed.txt
+          ' scan-output.json > dual-licensed.txt
 
           if [ -s dual-licensed.txt ]; then
-             echo "Detected files with dual licenses (Permissive + GPL):"
-             cat dual-licensed.txt
-             echo "Assuming user can choose permissive license. Proceeding..."
-            else
-             echo "No permissive+GPL dual-licensed files found."
+            echo " Detected files with dual licenses (Permissive + GPL):"
+            cat dual-licensed.txt
+            echo " Assuming user can choose permissive license. Proceeding..."
+          else
+            echo " No permissive+GPL dual-licensed files found."
           fi
+
 
 
       - name: Check for risky licenses (excluding dual-licensed files)
