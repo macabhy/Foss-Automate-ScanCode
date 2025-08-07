@@ -1,123 +1,72 @@
-name: FOSS License Scan
+name: ScanCode FOSS License Scan
 
-on:
-  push:
-    branches: [main]
-  pull_request:
+on: [push, pull_request]
 
 jobs:
-  scan:
+  license-scan:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    # Checkout repo
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Install dependencies and GitHub CLI
-        run: |
-          sudo apt update
-          sudo apt install -y git python3 python3-pip jq gh
+    # Set up Python
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
 
-      - name: Clone and configure ScanCode Toolkit
-        run: |
-          git clone https://github.com/nexB/scancode-toolkit.git
-          cd scancode-toolkit
-          ./configure
+    # Install ScanCode Toolkit
+    - name: Install ScanCode Toolkit
+      run: |
+        git clone https://github.com/nexB/scancode-toolkit.git
+        cd scancode-toolkit
+        pip install -e .
+        cd ..
 
-      - name: Clean old scan output
-        run: rm -f scan-output.json      
+    # Run ScanCode
+    - name: Run ScanCode on current project
+      run: |
+        scancode-toolkit/scancode --json-pp scan-output.json .
 
-      - name: Run ScanCode license scan
-        run: |
-          cd scancode-toolkit
-          ./scancode \
-          --license \
-          --json-pp ../scan-output.json \
-          ../src/uuid/src
+    # Extract and print detected licenses
+    - name: Show detected licenses
+      run: |
+        echo " Detected licenses:"
+        jq -r '.license_detections[].license_expression' scan-output.json || echo "No licenses found"
 
+    # Fail build if risky licenses (like GPL or AGPL) found
+    - name: Check for risky licenses
+      run: |
+        echo " Checking for risky licenses..."
+        jq -r '.license_detections[].license_expression' scan-output.json > detected-licenses.txt
+        if grep -Ei 'gpl|agpl' detected-licenses.txt; then
+          echo " Risky license found: GPL/AGPL"
+          exit 1
+        else
+          echo " No risky licenses found"
+        fi
 
+    # Detect permissive+GPL dual-licensed files
+    - name: Check for dual-licensed files (MIT OR GPL, etc.)
+      run: |
+        echo " Checking for dual-licensed files (e.g., MIT OR GPL)..."
+        matches=$(jq -r '
+          .files[] 
+          | select(.license_expression != null)
+          | .license_expression
+          | gsub("[()\"]"; "") 
+          | split(" and | AND | or | OR ") 
+          | map(ascii_downcase | ltrimstr(" ") | rtrimstr(" ")) as $licenses
+          | if (["mit", "bsd", "apache-2.0"] | any(. as $p | $licenses[] | contains($p))) 
+             and ($licenses[] | contains("gpl")) 
+            then 1 else empty end
+        ' scan-output.json)
 
-      - name: Detect dual-licensed (Permissive + GPL) files
-        run: |
-          echo " Checking for dual-licensed files (e.g., MIT OR GPL)..."
-          jq -r '
-            .files[]
-            | select(.license_expression != null)
-            | {
-                path,
-                licenses: (
-                  .license_expression
-                  | gsub("[()\"]"; "")                               # remove brackets/quotes
-                  | split(" and | AND | or | OR ")                  # split on AND/OR
-                  | map(ascii_downcase | gsub("^\\s+|\\s+$"; ""))   # lowercase + trim
-                )
-              }
-            | select(
-                (.licenses | any(. == "gpl-2.0" or . == "gpl-3.0"))
-                and
-                (.licenses | any(. == "mit" or . == "bsd" or . == "apache-2.0"))
-              )
-            | "\(.path): \(.licenses | join(", "))"
-          ' scan-output.json > dual-licensed.txt
-
-          if [ -s dual-licensed.txt ]; then
-            echo " Detected files with dual licenses (Permissive + GPL):"
-            cat dual-licensed.txt
-            echo " Assuming user can choose permissive license. Proceeding..."
-          else
-            echo " No permissive+GPL dual-licensed files found."
-          fi
-
-
-
-
-
-      - name: Check for risky licenses (excluding dual-licensed files)
-        run: |
-          echo "Checking for risky licenses (excluding dual-licensed files)..."
-
-          # Step 1: Get list of dual-licensed file paths
-          if [ -f dual-licensed.txt ]; then
-            cat dual-licensed.txt | cut -d ':' -f1 > dual_paths.txt
-          else
-            touch dual_paths.txt
-          fi
-
-          # Step 2: Scan all files for risky licenses
-          jq -r '
-            .files[]
-            | select(.license_expression != null)
-            | select(.license_expression | test("gpl-2.0|gpl-3.0|agpl|lgpl"))
-            | "\(.path): \(.license_expression)"
-          ' scan-output.json > all-risky.txt
-
-          # Step 3: Exclude dual-licensed files from risky list
-          grep -v -F -f dual_paths.txt all-risky.txt > risky.txt || true
-
-          # Step 4: Show and fail if any risky license remains
-          if [ -s risky.txt ]; then
-            echo "Risky licenses found (not dual-licensed):"
-            cat risky.txt
-            exit 1
-          else
-            echo "No risky licenses found (excluding dual-licensed files)."
-          fi
-
-
-      - name: Generate SPDX and CycloneDX SBOMs
-        run: |
-          cd scancode-toolkit
-          ./scancode \
-            --spdx-tv ../scan-output.spdx \
-            --cyclonedx ../scan-output.cyclonedx.json \
-            ../src/uuid/src
-
-
-      - name: Upload all scan artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: foss-scan-reports
-          path: |
-            scan-output.json
-            scan-output.spdx
-            scan-output.cyclonedx.json
+        if [ -n "$matches" ]; then
+          echo " Found permissive+GPL dual-licensed file(s)"
+          exit 1
+        else
+          echo " No permissive+GPL dual-licensed files found"
+        fi
