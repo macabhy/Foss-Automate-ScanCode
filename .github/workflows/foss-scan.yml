@@ -38,7 +38,6 @@ jobs:
           echo " Detected licenses:"
           jq -r '.files[] | select(.license_expression != null) | "\(.license_expression) :: \(.path)"' scan-output.json | sort -u
 
-
       - name: Check for risky licenses
         run: |
           echo " Checking for risky licenses..."
@@ -69,13 +68,3 @@ jobs:
           else
             echo " No risky licenses found"
           fi
-
-
-          if [ "$risky_found" -eq 1 ]; then
-            echo " Build failed due to risky licenses."
-            exit 1
-          else
-            echo " No risky licenses found"
-          fi
-
-      
