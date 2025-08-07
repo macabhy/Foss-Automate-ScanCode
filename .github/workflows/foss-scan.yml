@@ -17,16 +17,25 @@ jobs:
       with:
         python-version: '3.x'
 
-    # Install ScanCode Toolkit
-    - name: Install ScanCode Toolkit
+    # clone scancode
+    - name: Clone and configure ScanCode Toolkit
       run: |
-        git clone https://github.com/nexB/scancode-toolkit.git
-        pip install -e ./scancode-toolkit
+          git clone https://github.com/nexB/scancode-toolkit.git
+          cd scancode-toolkit
+          ./configure
+          
+    # clears previous scan output
+    - name: Clean old scan output
+      run: rm -f scan-output.json      
 
-    # Run ScanCode
-    - name: Run ScanCode on current project
+    # Install dependencies
+    - name: Run ScanCode license scan
       run: |
-        scancode-toolkit/scancode --json-pp scan-output.json .
+          cd scancode-toolkit
+          ./scancode \
+          --license \
+          --json-pp ../scan-output.json \
+          ../src/uuid/src
 
     # Extract and print detected licenses
     - name: Show detected licenses
