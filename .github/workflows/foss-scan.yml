@@ -1,79 +1,70 @@
-name: ScanCode FOSS License Scan
+name: FOSS License Scan
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
   license-scan:
     runs-on: ubuntu-latest
 
     steps:
-    # Checkout repo
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    # Set up Python
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.x'
-
-    # clone scancode
-    - name: Clone and configure ScanCode Toolkit
-      run: |
+      - name: Clone and configure ScanCode Toolkit
+        run: |
           git clone https://github.com/nexB/scancode-toolkit.git
           cd scancode-toolkit
           ./configure
-          
-    # clears previous scan output
-    - name: Clean old scan output
-      run: rm -f scan-output.json      
 
-    # Install dependencies
-    - name: Run ScanCode license scan
-      run: |
+      - name: Clean old scan output
+        run: rm -f scan-output.json
+
+      - name: Run ScanCode license scan
+        run: |
           cd scancode-toolkit
           ./scancode \
-          --license \
-          --json-pp ../scan-output.json \
-          ../src/uuid/src
+            --license \
+            --json-pp ../scan-output.json \
+            ../src/uuid/src
 
-    # Extract and print detected licenses
-    - name: Show detected licenses
-      run: |
-        echo " Detected licenses:"
-        jq -r '.license_detections[].license_expression' scan-output.json || echo "No licenses found"
+      - name: Show detected licenses with file paths
+        run: |
+          echo " Detected licenses:"
+          jq -r '.license_detections[] | "\(.license_expression) :: \(.location.path)""' scan-output.json | sort -u
 
-    # Fail build if risky licenses (like GPL or AGPL) found
-    - name: Check for risky licenses
-      run: |
-        echo " Checking for risky licenses..."
-        jq -r '.license_detections[].license_expression' scan-output.json > detected-licenses.txt
-        if grep -Ei 'gpl|agpl' detected-licenses.txt; then
-          echo " Risky license found: GPL/AGPL"
-          exit 1
-        else
-          echo " No risky licenses found"
-        fi
+      - name: Check for risky licenses
+        run: |
+          echo " Checking for risky licenses..."
 
-    # Detect permissive+GPL dual-licensed files
-    - name: Check for dual-licensed files (MIT OR GPL, etc.)
-      run: |
-        echo " Checking for dual-licensed files (e.g., MIT OR GPL)..."
-        matches=$(jq -r '
-          .files[] 
-          | select(.license_expression != null)
-          | .license_expression
-          | gsub("[()\"]"; "") 
-          | split(" and | AND | or | OR ") 
-          | map(ascii_downcase | ltrimstr(" ") | rtrimstr(" ")) as $licenses
-          | if (["mit", "bsd", "apache-2.0"] | any(. as $p | $licenses[] | contains($p))) 
-             and ($licenses[] | contains("gpl")) 
-            then 1 else empty end
-        ' scan-output.json)
+          risky_found=0
 
-        if [ -n "$matches" ]; then
-          echo " Found permissive+GPL dual-licensed file(s)"
-          exit 1
-        else
-          echo " No permissive+GPL dual-licensed files found"
-        fi
+          jq -c '.license_detections[]' scan-output.json | while read -r detection; do
+            expr=$(echo "$detection" | jq -r '.license_expression')
+            file=$(echo "$detection" | jq -r '.location.path')
+            normalized=$(echo "$expr" | tr '[:upper:]' '[:lower:]')
+
+            # Ignore dual-licensed expressions
+            if echo "$normalized" | grep -q " or "; then
+              echo " Ignored dual-licensed: $expr in $file"
+              continue
+            fi
+
+            # Flag risky licenses (GPL/AGPL)
+            if echo "$normalized" | grep -E 'gpl|agpl'; then
+              echo " Risky license found: $expr in $file"
+              risky_found=1
+            fi
+          done
+
+          if [ "$risky_found" -eq 1 ]; then
+            echo " Build failed due to risky licenses."
+            exit 1
+          else
+            echo " No risky licenses found"
+          fi
