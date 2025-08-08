@@ -1,70 +1,70 @@
 name: FOSS License Scan
 
 on:
+  workflow_dispatch:
   push:
-    branches:
-      - main
+    paths:
+      - 'uuid/**'
   pull_request:
-    branches:
-      - main
+    paths:
+      - 'uuid/**'
 
 jobs:
-  license-scan:
+  scan:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Clone and configure ScanCode Toolkit
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install ScanCode Toolkit
         run: |
           git clone https://github.com/nexB/scancode-toolkit.git
           cd scancode-toolkit
           ./configure
 
-      - name: Clean old scan output
-        run: rm -f scan-output.json
-
-      - name: Run ScanCode license scan
+      - name: Run ScanCode license scan on uuid/
         run: |
           cd scancode-toolkit
-          ./scancode \
-            --license \
-            --json-pp ../scan-output.json \
-            ../src/uuid
+          ./scancode --license --json-pp ../scan-output.json ../uuid
 
-      - name: Show detected licenses with file paths
+      - name: Check for risky licenses (exclusive or multi-licensed)
         run: |
-          echo " Detected licenses:"
-          jq -r '.files[] | select(.license_expression != null) | "\(.license_expression) :: \(.path)"' scan-output.json | sort -u
+          echo "🔍 Checking scan-output.json for risky licenses..."
 
-      - name: Check for risky licenses
-        run: |
-          echo " Checking for risky licenses..."
+          RISKY_LICENSES=("gpl-2.0" "gpl-3.0" "agpl-3.0")
+          FOUND_RISKY=0
+          declare -A DETECTED_LICENSES
 
-          risky_found=0
+          while IFS=$'\t' read -r path license_expr; do
+            DETECTED_LICENSES["$license_expr"]=1
 
-          jq -c '.files[] | select(.license_expression != null)' scan-output.json | while read -r file; do
-            expr=$(echo "$file" | jq -r '.license_expression')
-            path=$(echo "$file" | jq -r '.path')
-            normalized=$(echo "$expr" | tr '[:upper:]' '[:lower:]')
+            for risky in "${RISKY_LICENSES[@]}"; do
+              if [[ "$license_expr" == "$risky" ]]; then
+                echo "::error file=$path::❗ File '$path' is exclusively under risky license: $license_expr"
+                FOUND_RISKY=1
+              elif [[ "$license_expr" == *"$risky"* ]]; then
+                echo "::warning file=$path::⚠️ File '$path' includes risky license in multi-license expression: $license_expr"
+                FOUND_RISKY=1
+              fi
+            done
+          done < <(jq -r '.files[] | select(.license_expression != null) | [.path, .license_expression] | @tsv' scan-output.json)
 
-            # Ignore dual-licensed expressions
-            if echo "$normalized" | grep -q " or "; then
-              echo " Ignored dual-licensed: $expr in $path"
-              continue
-            fi
-
-            # Flag risky licenses (GPL/AGPL)
-            if echo "$normalized" | grep -E 'gpl|agpl'; then
-              echo " Risky license found: $expr in $path"
-              risky_found=1
-            fi
+          echo ""
+          echo "📄 Detected License Expressions Summary:"
+          for lic in "${!DETECTED_LICENSES[@]}"; do
+            echo "• $lic"
           done
+          echo ""
 
-          if [ "$risky_found" -eq 1 ]; then
-            echo " Build failed due to risky licenses."
+          if [ "$FOUND_RISKY" -eq 1 ]; then
+            echo "::error::❌ Risky licenses detected (exclusive or multi-licensed). Failing the build."
             exit 1
           else
-            echo " No risky licenses found"
+            echo "✅ All files are clean and safe."
           fi
