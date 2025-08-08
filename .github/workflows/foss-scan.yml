@@ -1,13 +1,9 @@
 name: FOSS License Scan
 
 on:
-  workflow_dispatch:
   push:
-    paths:
-      - 'uuid/**'
-  pull_request:
-    paths:
-      - 'uuid/**'
+    branches:
+      - main
 
 jobs:
   scan:
